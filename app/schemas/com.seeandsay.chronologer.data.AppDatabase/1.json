@@ -1,0 +1,131 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "cfd7395ca53c435664a1f4f476be0d0e",
+    "entities": [
+      {
+        "tableName": "chronologer_history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `formatted_timestamp` TEXT NOT NULL, `active_device` TEXT NOT NULL, `primary_app` TEXT NOT NULL, `primary_activity` TEXT NOT NULL, `visible_text` TEXT NOT NULL, `micro_actions` TEXT NOT NULL, `physical_action` TEXT NOT NULL, `ambient_context` TEXT NOT NULL, `raw_payload` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "formattedTimestamp",
+            "columnName": "formatted_timestamp",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeDevice",
+            "columnName": "active_device",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryApp",
+            "columnName": "primary_app",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "primaryActivity",
+            "columnName": "primary_activity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visibleText",
+            "columnName": "visible_text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "microActions",
+            "columnName": "micro_actions",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "physicalAction",
+            "columnName": "physical_action",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ambientContext",
+            "columnName": "ambient_context",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawPayload",
+            "columnName": "raw_payload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_chronologer_history_timestamp",
+            "unique": false,
+            "columnNames": [
+              "timestamp"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chronologer_history_timestamp` ON `${TABLE_NAME}` (`timestamp`)"
+          },
+          {
+            "name": "index_chronologer_history_primary_app",
+            "unique": false,
+            "columnNames": [
+              "primary_app"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chronologer_history_primary_app` ON `${TABLE_NAME}` (`primary_app`)"
+          },
+          {
+            "name": "index_chronologer_history_primary_activity",
+            "unique": false,
+            "columnNames": [
+              "primary_activity"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chronologer_history_primary_activity` ON `${TABLE_NAME}` (`primary_activity`)"
+          },
+          {
+            "name": "index_chronologer_history_visible_text",
+            "unique": false,
+            "columnNames": [
+              "visible_text"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chronologer_history_visible_text` ON `${TABLE_NAME}` (`visible_text`)"
+          }
+        ],
+        "foreignKeys": []
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cfd7395ca53c435664a1f4f476be0d0e')"
+    ]
+  }
+}
