@@ -1,0 +1,33 @@
+name: Deploy to Appetize
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-upload:
+  
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
+
+    - name: Upload to Appetize.io
+      uses: appetizeio/github-action-appetize@v1.1.0
+      with:
+        apiToken: ${{ secrets.APPETIZE_TOKEN }}
+        appFile: app/build/outputs/apk/debug/app-debug.apk
+        platform: 'android'
