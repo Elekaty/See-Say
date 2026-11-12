@@ -194,7 +194,7 @@ class AIVisionNarrator(
             .put(
                 "generationConfig",
                 JSONObject()
-                    .put("maxOutputTokens", 4096)
+                    .put("maxOutputTokens", 2048)
                     .put(
                         "thinkingConfig",
                         JSONObject().put("thinkingLevel", "low"),
@@ -204,12 +204,16 @@ class AIVisionNarrator(
             .toByteArray(Charsets.UTF_8)
 
         val primary = postUntilReady(PRIMARY_ENDPOINT, cleanKey, payload)
-        val result = if (primary.code == 200) {
-            primary
-        } else if (primary.code == 404 || primary.code in RETRYABLE_STATUS) {
-            postUntilReady(FALLBACK_ENDPOINT, cleanKey, payload)
-        } else {
-            primary
+        val result = when {
+            primary.code == 200 -> primary
+            primary.code == 0 -> {
+                _status.value = "GEMINI_RETRYING 1 0"
+                postGenerateContent(FALLBACK_ENDPOINT, cleanKey, payload)
+            }
+            primary.code == 404 || primary.code in RETRYABLE_STATUS -> {
+                postUntilReady(FALLBACK_ENDPOINT, cleanKey, payload)
+            }
+            else -> primary
         }
         if (result.code != 200) {
             _status.value = "GEMINI_HTTP_${result.code} ${result.body.trim()}"
@@ -234,9 +238,10 @@ class AIVisionNarrator(
     private fun postGenerateContent(endpoint: String, cleanKey: String, payload: ByteArray): GeminiHttpResult {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 20_000
-            readTimeout = 45_000
+            connectTimeout = 30_000
+            readTimeout = 60_000
             doOutput = true
+            setFixedLengthStreamingMode(payload.size)
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("x-goog-api-key", cleanKey)
         }

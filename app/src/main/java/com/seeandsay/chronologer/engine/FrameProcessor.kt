@@ -3,10 +3,11 @@ package com.seeandsay.chronologer.engine
 import android.graphics.Bitmap
 import java.io.ByteArrayOutputStream
 import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Drops unchanged frames on device, crops the Ray-Ban center region, and emits WebP.
- * The 32x32 thumbnail is only the delta reference. The returned bytes are the full crop.
+ * The 32x32 thumbnail is only the delta reference. The returned bytes are scaled for the model.
  */
 class FrameProcessor {
     private var previousThumbnail: Bitmap? = null
@@ -105,12 +106,31 @@ class FrameProcessor {
     }
 
     private fun compressWebp(bitmap: Bitmap): ByteArray? {
-        val stream = ByteArrayOutputStream()
-        val wrote = bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, WEBP_QUALITY, stream)
-        if (!wrote || stream.size() == 0) {
-            return null
+        val scaled = scaleForModel(bitmap)
+        val ownsScaled = scaled !== bitmap
+        try {
+            val stream = ByteArrayOutputStream()
+            val wrote = scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, WEBP_QUALITY, stream)
+            if (!wrote || stream.size() == 0) {
+                return null
+            }
+            return stream.toByteArray()
+        } finally {
+            if (ownsScaled && !scaled.isRecycled) {
+                scaled.recycle()
+            }
         }
-        return stream.toByteArray()
+    }
+
+    private fun scaleForModel(bitmap: Bitmap): Bitmap {
+        val longEdge = max(bitmap.width, bitmap.height)
+        if (longEdge <= MODEL_LONG_EDGE) {
+            return bitmap
+        }
+        val scale = MODEL_LONG_EDGE.toFloat() / longEdge.toFloat()
+        val width = (bitmap.width * scale).toInt().coerceAtLeast(1)
+        val height = (bitmap.height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
     }
 
     private companion object {
@@ -118,6 +138,7 @@ class FrameProcessor {
         const val LUMA_THRESHOLD = 45
         const val CHANGE_FRACTION = 0.035f
         const val ROI_FRACTION = 0.70f
-        const val WEBP_QUALITY = 92
+        const val MODEL_LONG_EDGE = 1024
+        const val WEBP_QUALITY = 80
     }
 }

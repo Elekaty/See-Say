@@ -408,7 +408,11 @@ private fun narratorBanner(status: String): String? {
                 val parts = status.split(' ')
                 val attempt = parts.getOrNull(1).orEmpty()
                 val code = parts.getOrNull(2).orEmpty()
-                "Gemini is busy (HTTP $code). Retry $attempt of 3."
+                if (code == "0") {
+                    "Gemini timed out. Trying a faster model."
+                } else {
+                    "Gemini is busy (HTTP $code). Retry $attempt of 3."
+                }
             }
             status.startsWith("GEMINI_HTTP_") -> {
                 val rest = status.removePrefix("GEMINI_HTTP_")
