@@ -53,7 +53,7 @@ class ChronologerViewModel(application: Application) : AndroidViewModel(applicat
     private var handshakePending = false
 
     private val _geminiApiKey = MutableStateFlow(
-        preferences.getString(KEY_GEMINI, null) ?: BuildConfig.GEMINI_API_KEY,
+        (preferences.getString(KEY_GEMINI, null) ?: BuildConfig.GEMINI_API_KEY).trim(),
     )
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
 
@@ -139,9 +139,10 @@ class ChronologerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun setGeminiApiKey(value: String) {
-        _geminiApiKey.value = value
-        narrator.apiKey = value.trim()
-        preferences.edit().putString(KEY_GEMINI, value).apply()
+        val clean = value.trim()
+        _geminiApiKey.value = clean
+        narrator.apiKey = clean
+        preferences.edit().putString(KEY_GEMINI, clean).apply()
     }
 
     fun selectCameraMode(mode: CameraSourceMode) {
@@ -403,7 +404,16 @@ private fun narratorBanner(status: String): String? {
         "GEMINI_BAD_RESPONSE" -> "Gemini returned a response that could not be read."
         "IDLE", "STOPPED", "TTS_READY", "" -> null
         else -> when {
-            status.startsWith("GEMINI_HTTP_") -> "Gemini request failed (HTTP ${status.removePrefix("GEMINI_HTTP_")})."
+            status.startsWith("GEMINI_HTTP_") -> {
+                val rest = status.removePrefix("GEMINI_HTTP_")
+                val code = rest.takeWhile { it.isDigit() }
+                val detail = rest.drop(code.length).trim()
+                if (detail.isEmpty()) {
+                    "Gemini request failed (HTTP $code)."
+                } else {
+                    "Gemini HTTP $code: $detail"
+                }
+            }
             status.startsWith("GEMINI_BLOCKED_") -> "Gemini blocked the frame (${status.removePrefix("GEMINI_BLOCKED_")})."
             status.startsWith("GEMINI_") -> "Gemini status: ${status.removePrefix("GEMINI_")}."
             else -> null

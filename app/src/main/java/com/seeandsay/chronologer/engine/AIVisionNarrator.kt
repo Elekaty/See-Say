@@ -159,12 +159,14 @@ class AIVisionNarrator(
     }
 
     private suspend fun requestChronolog(webp: ByteArray): String? = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
+        val cleanKey = apiKey.trim()
+        apiKey = cleanKey
+        if (cleanKey.isBlank()) {
             _status.value = "GEMINI_API_KEY_MISSING"
             return@withContext null
         }
         val prior = previousRawOutput.ifBlank { "(none)" }
-        val body = JSONObject()
+        val payload = JSONObject()
             .put(
                 "systemInstruction",
                 JSONObject().put("parts", JSONArray().put(JSONObject().put("text", SYSTEM_PROMPT))),
@@ -195,34 +197,44 @@ class AIVisionNarrator(
                     .put("temperature", 0.2)
                     .put("maxOutputTokens", 4096),
             )
+            .toString()
+            .toByteArray(Charsets.UTF_8)
 
-        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
+        val primary = postGenerateContent(PRIMARY_ENDPOINT, cleanKey, payload)
+        val result = if (primary.code == 404) {
+            postGenerateContent(FALLBACK_ENDPOINT, cleanKey, payload)
+        } else {
+            primary
+        }
+        if (result.code != 200) {
+            _status.value = "GEMINI_HTTP_${result.code} ${result.body.trim()}"
+            return@withContext null
+        }
+        extractText(result.body)
+    }
+
+    private fun postGenerateContent(endpoint: String, cleanKey: String, payload: ByteArray): GeminiHttpResult {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 20_000
             readTimeout = 45_000
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            setRequestProperty("x-goog-api-key", apiKey)
+            setRequestProperty("x-goog-api-key", cleanKey)
         }
-        try {
-            connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray(Charsets.UTF_8))
-            }
+        return try {
+            connection.outputStream.use { output -> output.write(payload) }
             val responseCode = connection.responseCode
-            val responseText = (if (responseCode in 200..299) connection.inputStream else connection.errorStream)
-                ?.bufferedReader(Charsets.UTF_8)
-                ?.use { it.readText() }
-                .orEmpty()
-            if (responseCode !in 200..299) {
-                _status.value = "GEMINI_HTTP_$responseCode"
-                return@withContext null
+            val responseText = if (responseCode == 200) {
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             }
-            extractText(responseText)
+            GeminiHttpResult(responseCode, responseText)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            _status.value = error.message?.ifBlank { null } ?: "GEMINI_REQUEST_FAILED"
-            null
+            GeminiHttpResult(0, error.message?.ifBlank { null } ?: "GEMINI_REQUEST_FAILED")
         } finally {
             connection.disconnect()
         }
@@ -259,9 +271,13 @@ class AIVisionNarrator(
         return text
     }
 
+    private data class GeminiHttpResult(val code: Int, val body: String)
+
     private companion object {
-        const val ENDPOINT =
+        const val PRIMARY_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+        const val FALLBACK_ENDPOINT =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
         const val SNAPSHOT_INTERVAL_MS = 500L
         const val FRAME_WAIT_MS = 2_500L
 
