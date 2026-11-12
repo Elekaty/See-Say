@@ -404,6 +404,12 @@ private fun narratorBanner(status: String): String? {
         "GEMINI_BAD_RESPONSE" -> "Gemini returned a response that could not be read."
         "IDLE", "STOPPED", "TTS_READY", "" -> null
         else -> when {
+            status.startsWith("GEMINI_RETRYING") -> {
+                val parts = status.split(' ')
+                val attempt = parts.getOrNull(1).orEmpty()
+                val code = parts.getOrNull(2).orEmpty()
+                "Gemini is busy (HTTP $code). Retry $attempt of 3."
+            }
             status.startsWith("GEMINI_HTTP_") -> {
                 val rest = status.removePrefix("GEMINI_HTTP_")
                 val code = rest.takeWhile { it.isDigit() }

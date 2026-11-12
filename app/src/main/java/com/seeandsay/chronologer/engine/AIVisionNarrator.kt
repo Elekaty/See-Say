@@ -194,15 +194,20 @@ class AIVisionNarrator(
             .put(
                 "generationConfig",
                 JSONObject()
-                    .put("temperature", 0.2)
-                    .put("maxOutputTokens", 4096),
+                    .put("maxOutputTokens", 4096)
+                    .put(
+                        "thinkingConfig",
+                        JSONObject().put("thinkingLevel", "low"),
+                    ),
             )
             .toString()
             .toByteArray(Charsets.UTF_8)
 
-        val primary = postGenerateContent(PRIMARY_ENDPOINT, cleanKey, payload)
-        val result = if (primary.code == 404) {
-            postGenerateContent(FALLBACK_ENDPOINT, cleanKey, payload)
+        val primary = postUntilReady(PRIMARY_ENDPOINT, cleanKey, payload)
+        val result = if (primary.code == 200) {
+            primary
+        } else if (primary.code == 404 || primary.code in RETRYABLE_STATUS) {
+            postUntilReady(FALLBACK_ENDPOINT, cleanKey, payload)
         } else {
             primary
         }
@@ -211,6 +216,19 @@ class AIVisionNarrator(
             return@withContext null
         }
         extractText(result.body)
+    }
+
+    private suspend fun postUntilReady(endpoint: String, cleanKey: String, payload: ByteArray): GeminiHttpResult {
+        var result = postGenerateContent(endpoint, cleanKey, payload)
+        var attempt = 0
+        while (result.code in RETRYABLE_STATUS && attempt < MAX_UNAVAILABLE_RETRIES) {
+            attempt += 1
+            val waitMs = result.retryAfterMs ?: (1_000L shl (attempt - 1)).coerceAtMost(8_000L)
+            _status.value = "GEMINI_RETRYING $attempt ${result.code}"
+            delay(waitMs)
+            result = postGenerateContent(endpoint, cleanKey, payload)
+        }
+        return result
     }
 
     private fun postGenerateContent(endpoint: String, cleanKey: String, payload: ByteArray): GeminiHttpResult {
@@ -230,7 +248,7 @@ class AIVisionNarrator(
             } else {
                 connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             }
-            GeminiHttpResult(responseCode, responseText)
+            GeminiHttpResult(responseCode, responseText, retryAfterMillis(connection))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -258,7 +276,9 @@ class AIVisionNarrator(
         }
         val text = buildString {
             for (index in 0 until parts.length()) {
-                val chunk = parts.optJSONObject(index)?.optString("text").orEmpty()
+                val part = parts.optJSONObject(index) ?: continue
+                if (part.optBoolean("thought", false)) continue
+                val chunk = part.optString("text").orEmpty()
                 if (chunk.isNotEmpty()) {
                     append(chunk)
                 }
@@ -271,13 +291,25 @@ class AIVisionNarrator(
         return text
     }
 
-    private data class GeminiHttpResult(val code: Int, val body: String)
+    private data class GeminiHttpResult(
+        val code: Int,
+        val body: String,
+        val retryAfterMs: Long? = null,
+    )
+
+    private fun retryAfterMillis(connection: HttpURLConnection): Long? {
+        val header = connection.getHeaderField("Retry-After")?.trim().orEmpty()
+        val seconds = header.toLongOrNull() ?: return null
+        return (seconds * 1_000L).coerceIn(0L, 15_000L)
+    }
 
     private companion object {
         const val PRIMARY_ENDPOINT =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent"
         const val FALLBACK_ENDPOINT =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        const val MAX_UNAVAILABLE_RETRIES = 3
+        val RETRYABLE_STATUS = setOf(429, 500, 502, 503)
         const val SNAPSHOT_INTERVAL_MS = 500L
         const val FRAME_WAIT_MS = 2_500L
 
